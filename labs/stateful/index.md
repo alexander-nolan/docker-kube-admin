@@ -354,8 +354,8 @@ data-mysql-1   Bound    pvc-47076f1d-3fbe-11ea-94be-0aff3e98c5a0   10Gi       RW
 You can use **mysql-client** to send some data to the leader, **mysql-0.mysql** by running the following command.
 
 ```sh
-kubectl -n mysql run mysql-client --image=mysql:5.7 -i --rm --restart=Never -- \
-  mysql -h mysql <<EOF
+kubectl -n mysql run mysql-client --image=mysql:5.7 -i --rm --restart=Never --\
+  mysql -h mysql-0.mysql <<EOF
 CREATE DATABASE test;
 CREATE TABLE test.messages (message VARCHAR(250));
 INSERT INTO test.messages VALUES ('hello, from mysql-client');
@@ -366,7 +366,7 @@ Run the following to test follower `mysql-read` received the data.
 
 ```sh
 kubectl -n mysql run mysql-client --image=mysql:5.7 -it --rm --restart=Never --\
-  mysql -uroot -p -h mysql-read -e "SELECT * FROM test.messages"
+  mysql -h mysql-read -e "SELECT * FROM test.messages"
 ```
 
 Output:
@@ -501,7 +501,7 @@ mysql-1   2/2     Running           0          18s
 ### Test Scaling 
 More followers can be added to the MySQL Cluster to increase read capacity. 
 ```sh
-kubectl -n mysql scale statefulset mysql --replicas=5
+kubectl -n mysql scale statefulset mysql --replicas=3
 ```
 
 Watch the progress of ordered and graceful scaling.
@@ -513,7 +513,7 @@ kubectl -n mysql rollout status statefulset mysql
 Output:
 ```
 Waiting for 1 pods to be ready...
-partitioned roll out complete: 5 new pods have been updated...
+partitioned roll out complete: 3 new pods have been updated...
 ```
 
 In another terminal watch the new pod come online
@@ -529,7 +529,7 @@ kubectl -n mysql run mysql-client-loop --image=mysql:5.7 -i -t --rm --restart=Ne
    bash -ic "while sleep 1; do mysql -h mysql-read -e 'SELECT @@server_id,NOW()'; done"
 ```
 
-You will now see 5 servers running. 
+You will now see 3 servers running. 
 
 Output:
 ```
@@ -550,10 +550,10 @@ Output:
 +-------------+---------------------+
 ```
 
-Verify if the newly deployed follower `mysql-4` has the same data set.
+Verify if the newly deployed follower `mysql-2` has the same data set.
 ```sh
 kubectl -n mysql run mysql-client --image=mysql:5.7 -i -t --rm --restart=Never --\
- mysql -h mysql-4.mysql -e "SELECT * FROM test.messages"
+ mysql -h mysql-2.mysql -e "SELECT * FROM test.messages"
 ```
 
 It will show the same data that the leader has.
@@ -567,13 +567,13 @@ Output:
 +--------------------------+
 ```
 
-Scale the replicas to 3
+Scale the replicas to 2
 
 ```sh
-kubectl -n mysql scale statefulset mysql --replicas=3
+kubectl -n mysql scale statefulset mysql --replicas=2
 ```
 
-You can see that it removed the last added replicas. 
+You can see that it removed the last added replica. 
 ```
 kubectl -n mysql get pods -l app=mysql
 ```
@@ -583,13 +583,23 @@ Output:
 NAME      READY     STATUS    RESTARTS   AGE
 mysql-0   2/2       Running   0          1d
 mysql-1   2/2       Running   0          1d
-mysql-2   2/2       Running   0          1d
+```
+Confirm the pvcs still exist
+```sh
+kubectl -n mysql  get pvc -l app=mysql
 ```
 
-### Bonus: Change Reclaim Policy
+Output:
+```
+NAME           STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+data-mysql-0   Bound    pvc-fdb74a5e-ba51-4ccf-925b-e64761575059   10Gi       RWO            managed-premium      18m
+data-mysql-1   Bound    pvc-355b9910-c446-4f66-8da6-629989a34d9a   10Gi       RWO            managed-premium    17m
+```
 
-By default, deleting a PersistentVolumeClaim will delete its associated persistent volume. What if you wanted to keep the volume?
+### Bonus (Change reclaim policy)
+By default, deleting a `PersistentVolumeClaim` will delete its associated persistent volume. What if you wanted to keep the volume?
 
+Change the reclaim policy:
 Find the `PersistentVolume` attached to the `PersistentVolumeClaim` `data-mysql-2`
 
 ```sh
@@ -597,7 +607,7 @@ export pv=$(kubectl -n mysql get pvc data-mysql-2 -o json | jq --raw-output '.sp
 echo data-mysql-2 PersistentVolume name: ${pv}
 ```
 
-Update the `ReclaimPolicy`
+Now update the `ReclaimPolicy`
 
 ```sh
 kubectl -n mysql patch pv ${pv} -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
@@ -627,6 +637,7 @@ kubectl -n mysql delete pvc data-mysql-2
 Output:
 ```
 persistentvolumeclaim "data-mysql-2" deleted
+```
 
 ## Cleanup
 ```sh
