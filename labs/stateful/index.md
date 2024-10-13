@@ -38,18 +38,10 @@ metadata:
 data:
   master.cnf: |
     [mysqld]
-    log-bin=mysql-bin
-    server-id=1
-    read_only=OFF
-    super_read_only=OFF
+    log-bin
   slave.cnf: |
     [mysqld]
-    super-read-only=ON
-    server-id=2
-  init.sql: |
-    CREATE USER IF NOT EXISTS 'root'@'%' IDENTIFIED BY 'rootpassword';
-    GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;
-    FLUSH PRIVILEGES;
+    super-read-only
 EoF
 ```
 
@@ -358,8 +350,8 @@ data-mysql-1   Bound    pvc-47076f1d-3fbe-11ea-94be-0aff3e98c5a0   10Gi       RW
 You can use **mysql-client** to send some data to the leader, **mysql-0.mysql** by running the following command.
 
 ```sh
-kubectl -n mysql run mysql-client --image=mysql:5.7 -i --rm --restart=Never --\
-  mysql -h mysql-0.mysql <<EOF
+kubectl -n mysql run mysql-client --image=mysql:5.7 -i --rm --restart=Never -- \
+  mysql -h mysql <<EOF
 CREATE DATABASE test;
 CREATE TABLE test.messages (message VARCHAR(250));
 INSERT INTO test.messages VALUES ('hello, from mysql-client');
