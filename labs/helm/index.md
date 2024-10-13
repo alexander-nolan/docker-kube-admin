@@ -161,18 +161,33 @@ spec:
           targetPort: {% raw %} {{ .Values.service.port }} {% endraw %}
 ```
 
-We now need to update `demo-app/templates/deployment.yaml` and remove the `liveness` and `readiness` probe sections. 
+We now need to update both `demo-app/templates/deployment.yaml` and `demo-app/values.yaml` to remove the `liveness` and `readiness` probe sections.
+
+First, in `demo-app/values.yaml`, remove or comment out the following sections:
+
 ```yaml
-<snip..>
-          livenessProbe:
-            httpGet:
-              path: /
-              port: http
-          readinessProbe:
-            httpGet:
-              path: /
-              port: http
-<..snip>
+# livenessProbe:
+#   httpGet:
+#     path: /
+#     port: http
+# readinessProbe:
+#   httpGet:
+#     path: /
+#     port: http
+```
+
+Then, in `demo-app/templates/deployment.yaml`, remove or comment out the references to these probes:
+
+```yaml
+          # Remove or comment out these lines
+          # {{- with .Values.livenessProbe }}
+          # livenessProbe:
+          #   {{- toYaml . | nindent 12 }}
+          # {{- end }}
+          # {{- with .Values.readinessProbe }}
+          # readinessProbe:
+          #   {{- toYaml . | nindent 12 }}
+          # {{- end }}
 ```
 
 ### Check syntax 
