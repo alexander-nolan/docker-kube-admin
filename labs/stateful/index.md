@@ -27,7 +27,7 @@ A ConfigMap allows you to decouple configuration artifacts and secrets from imag
 Run the following commands to create the ConfigMap.
 
 ```sh
-cat << EOF > ${HOME}/environment/azure_statefulset/mysql-configmap.yaml
+cat > ${HOME}/environment/azure_statefulset/mysql-configmap.yaml << 'EOF'
 apiVersion: v1
 kind: ConfigMap
 metadata:
