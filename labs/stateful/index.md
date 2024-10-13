@@ -63,8 +63,8 @@ By specifying **"None"** for the clusterIP, you can create a Headless Service.
 
 Create the mysql services file:
 ```sh
-# Create the headless service for stable DNS entries
-cat << EOF > ${HOME}/environment/azure_statefulset/mysql-headless-service.yaml
+cat << EoF > ${HOME}/environment/azure_statefulset/mysql-services.yaml
+# Headless service for stable DNS entries of StatefulSet members.
 apiVersion: v1
 kind: Service
 metadata:
@@ -79,11 +79,9 @@ spec:
   clusterIP: None
   selector:
     app: mysql
-EOF
-```
-```sh
-# Create the client service for read operations
-cat << EOF > ${HOME}/environment/azure_statefulset/mysql-read-service.yaml
+---
+# Client service for connecting to any MySQL instance for reads.
+# For writes, you must instead connect to the leader: mysql-0.mysql.
 apiVersion: v1
 kind: Service
 metadata:
@@ -97,13 +95,14 @@ spec:
     port: 3306
   selector:
     app: mysql
-EOF
+EoF
 ```
 
-# Apply the services
+You can see the **mysql** service is for DNS resolution so that when pods are placed by StatefulSet controller, pods can be resolved using ``pod-name.mysql``. **mysql-read** is a client service that does load balancing for all followers.
+
+Create service `mysql` and `mysql-read` by executing the following command
 ```sh
-kubectl apply -f ${HOME}/environment/azure_statefulset/mysql-headless-service.yaml
-kubectl apply -f ${HOME}/environment/azure_statefulset/mysql-read-service.yaml
+kubectl apply -f ${HOME}/environment/azure_statefulset/mysql-services.yaml
 ```
 
 ### Create StatefulSet
