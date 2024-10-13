@@ -588,35 +588,35 @@ mysql-2   2/2       Running   0          1d
 
 By default, deleting a PersistentVolumeClaim will delete its associated persistent volume. What if you wanted to keep the volume?
 
-1. Find the PersistentVolume attached to the PersistentVolumeClaim data-mysql-2:
+Find the `PersistentVolume` attached to the `PersistentVolumeClaim` `data-mysql-2`
 
 ```sh
 export pv=$(kubectl -n mysql get pvc data-mysql-2 -o json | jq --raw-output '.spec.volumeName')
 echo data-mysql-2 PersistentVolume name: ${pv}
 ```
 
-2. Update the ReclaimPolicy:
+Update the `ReclaimPolicy`
 
 ```sh
 kubectl -n mysql patch pv ${pv} -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
 ```
 
-3. Verify the ReclaimPolicy was updated:
+Verify the `ReclaimPolicy` was updated
 
 ```sh
 kubectl -n mysql get persistentvolume
 ```
 
-Now, if you delete the PersistentVolumeClaim data-mysql-2, you can still see the Azure Managed Disk in your Azure portal, with its state as "available".
+Now, if you delete the `PersistentVolumeClaim` `data-mysql-2`, you can still see the Azure Managed Disk in your Azure portal, with its state as "available".
 
-4. Change the reclaim policy back to "Delete" to avoid orphaned volumes:
+Let's change the reclaim policy back to "Delete" to avoid orphaned volumes:
 
 ```sh
 kubectl -n mysql patch pv ${pv} -p '{"spec":{"persistentVolumeReclaimPolicy":"Delete"}}'
 unset pv
 ```
 
-5. Delete data-mysql-2:
+Delete `data-mysql-2`
 
 ```sh
 kubectl -n mysql delete pvc data-mysql-2
