@@ -27,7 +27,7 @@ A ConfigMap allows you to decouple configuration artifacts and secrets from imag
 Run the following commands to create the ConfigMap.
 
 ```sh
-cat > ${HOME}/environment/azure_statefulset/mysql-configmap.yaml << 'EOF'
+cat << EoF > ${HOME}/environment/azure_statefulset/mysql-configmap.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -44,7 +44,7 @@ data:
     # Apply this config only on followers.
     [mysqld]
     super-read-only
-EOF
+EoF
 ```
 
 The ConfigMap stores `master.cnf`, `slave.cnf` and passes them when initializing leader and follower pods defined in `StatefulSet`:
