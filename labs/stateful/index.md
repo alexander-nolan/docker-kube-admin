@@ -234,7 +234,7 @@ You can use **mysql-client** to send some data to the leader, **mysql-0.mysql** 
 
 ```sh
 kubectl -n mysql run mysql-client --image=mysql:5.7 -i --rm --restart=Never --\
-  mysql -h mysql-0.mysql -proot<<EOF
+  mysql -h mysql-0.mysql <<EOF
 CREATE DATABASE test;
 CREATE TABLE test.messages (message VARCHAR(250));
 INSERT INTO test.messages VALUES ('hello, from mysql-client');
@@ -245,7 +245,7 @@ Run the following to test follower `mysql-read` received the data.
 
 ```sh
 kubectl -n mysql run mysql-client --image=mysql:5.7 -it --rm --restart=Never --\
-  mysql -h mysql-read -proot -e "SELECT * FROM test.messages"
+  mysql -h mysql-read -e "SELECT * FROM test.messages"
 ```
 
 Output:
@@ -260,7 +260,7 @@ Output:
 To test load balancing across followers, run the following command.
 ```sh
 kubectl -n mysql run mysql-client-loop --image=mysql:5.7 -i -t --rm --restart=Never --\
-   bash -ic "while sleep 1; do mysql -h mysql-read -proot -e 'SELECT @@server_id,NOW()'; done"
+   bash -ic "while sleep 1; do mysql -h mysql-read -e 'SELECT @@server_id,NOW()'; done"
 ```
 
 Each MySQL instance is assigned a unique identifier, and it can be retrieved using `@@server_id`. It will print the server id serving the request and the timestamp.
@@ -405,7 +405,7 @@ To exit type `Ctrl+C`
 If you stopped the loop start it again. 
 ```sh
 kubectl -n mysql run mysql-client-loop --image=mysql:5.7 -i -t --rm --restart=Never --\
-   bash -ic "while sleep 1; do mysql -h mysql-read -proot -e 'SELECT @@server_id,NOW()'; done"
+   bash -ic "while sleep 1; do mysql -h mysql-read -e 'SELECT @@server_id,NOW()'; done"
 ```
 
 You will now see 5 servers running. 
@@ -432,7 +432,7 @@ Output:
 Verify if the newly deployed follower `mysql-4` has the same data set.
 ```sh
 kubectl -n mysql run mysql-client --image=mysql:5.7 -i -t --rm --restart=Never --\
- mysql -h mysql-4.mysql -proot -e "SELECT * FROM test.messages"
+ mysql -h mysql-4.mysql -e "SELECT * FROM test.messages"
 ```
 
 It will show the same data that the leader has.
