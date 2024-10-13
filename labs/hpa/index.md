@@ -27,17 +27,26 @@ This document walks you through an example of enabling HorizontalPodAutoscaler t
 
 To follow this lab, you also need to use a cluster that has a Metrics Server deployed and configured. The Kubernetes Metrics Server collects resource metrics from the kubelets in your cluster and exposes those metrics through the Kubernetes API, using an APIService to add new kinds of resources that represent metric readings.
 
-## Install Kubernetes Metrics Server
+## Verify Kubernetes Metrics Server
 
-Install the Metrics server
+In Azure Kubernetes Service (AKS), the Metrics Server comes pre-installed. Let's verify its installation and proper functioning.
+
+First, check if the metrics-server deployment exists and is running:
 
 ```sh
-kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+kubectl get deployment metrics-server -n kube-system
 ```
 
-Confirm the server was installed correctly.
+You should see output similar to this:
 
-To view nodes metrics run:
+```
+NAME             READY   UP-TO-DATE   AVAILABLE   AGE
+metrics-server   2/2     2            2           XXm
+```
+
+Note that AKS typically deploys two replicas of the metrics-server for high availability.
+
+To confirm the server is functioning correctly, try viewing node metrics:
 
 ```bash
 kubectl get --raw "/apis/metrics.k8s.io/v1beta1/nodes" | jq .
