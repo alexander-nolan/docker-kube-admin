@@ -594,6 +594,7 @@ Output:
 NAME           STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   AGE
 data-mysql-0   Bound    pvc-fdb74a5e-ba51-4ccf-925b-e64761575059   10Gi       RWO            managed-premium      18m
 data-mysql-1   Bound    pvc-355b9910-c446-4f66-8da6-629989a34d9a   10Gi       RWO            managed-premium    17m
+data-mysql-2   Bound    pvc-12c304e4-2b3e-4621-8521-0dc17f41d107   10Gi       RWO            managed-premium    9m35s
 ```
 
 ### Bonus (Change reclaim policy)
