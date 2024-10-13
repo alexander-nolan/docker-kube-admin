@@ -98,7 +98,7 @@ spec:
 EoF
 ```
 
-You can see the **mysql** service is for DNS resolution so that when pods are placed by StatefulSet controller, pods can be resolved using `pod-name.mysql`. **mysql-read** is a client service that does load balancing for all followers.
+You can see the **mysql** service is for DNS resolution so that when pods are placed by StatefulSet controller, pods can be resolved using ``pod-name.mysql``. **mysql-read** is a client service that does load balancing for all followers.
 
 Create service `mysql` and `mysql-read` by executing the following command
 ```sh
@@ -179,7 +179,14 @@ Watch StatefulSet deployment status
 kubectl -n mysql rollout status statefulset mysql
 ```
 
-It will take a few minutes for pods to initialize and the `StatefulSet` to be created.
+It will take few minutes for pods to initialize and the `StatefulSet`  to be created.
+
+Output:
+```
+Waiting for 2 pods to be ready...
+Waiting for 1 pods to be ready...
+partitioned roll out complete: 2 new pods have been updated...
+```
 
 Open another terminal and watch the progress of pods creation using the following command.
 ```sh
@@ -188,9 +195,36 @@ kubectl -n mysql get pods -l app=mysql --watch
 
 You can see ordered, graceful deployment with a stable, unique name for each pod.
 
+```
+NAME      READY   STATUS           RESTARTS    AGE
+mysql-0   0/2     Init:0/2          0          16s
+mysql-0   0/2     Init:1/2          0          17s
+mysql-0   0/2     PodInitializing   0          18s
+mysql-0   1/2     Running           0          19s
+mysql-0   2/2     Running           0          25s
+mysql-1   0/2     Pending           0          0s
+mysql-1   0/2     Pending           0          0s
+mysql-1   0/2     Init:0/2          0          0s
+mysql-1   0/2     Init:1/2          0          10s
+mysql-1   0/2     PodInitializing   0          11s
+mysql-1   1/2     Running           0          12s
+mysql-1   2/2     Running           0          16s
+```
+
+Press `Ctrl+C` to stop watching.
+
 Check the dynamically created PVC
 ```sh
 kubectl -n mysql get pvc -l app=mysql
+```
+
+We can see `data-mysql-0`, and `data-mysql-1` have been created.
+
+Output:
+```
+NAME           STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS      AGE
+data-mysql-0   Bound    pvc-2a9bb222-3fbe-11ea-94be-0aff3e98c5a0   10Gi       RWO            managed-premium   22m
+data-mysql-1   Bound    pvc-47076f1d-3fbe-11ea-94be-0aff3e98c5a0   10Gi       RWO            managed-premium   21m
 ```
 
 ### Test MySQL
@@ -212,6 +246,15 @@ kubectl -n mysql run mysql-client --image=mysql:5.7 -it --rm --restart=Never --\
   mysql -h mysql-read -proot -e "SELECT * FROM test.messages"
 ```
 
+Output:
+```
++--------------------------+
+| message                  |
++--------------------------+
+| hello, from mysql-client |
++--------------------------+
+```
+
 To test load balancing across followers, run the following command.
 ```sh
 kubectl -n mysql run mysql-client-loop --image=mysql:5.7 -i -t --rm --restart=Never --\
@@ -220,9 +263,120 @@ kubectl -n mysql run mysql-client-loop --image=mysql:5.7 -i -t --rm --restart=Ne
 
 Each MySQL instance is assigned a unique identifier, and it can be retrieved using `@@server_id`. It will print the server id serving the request and the timestamp.
 
-### Test Scaling 
-Scale the replicas to 5:
+```
++-------------+---------------------+
+| @@server_id | NOW()               |
++-------------+---------------------+
+|         101 | 2021-02-21 19:17:52 |
++-------------+---------------------+
++-------------+---------------------+
+| @@server_id | NOW()               |
++-------------+---------------------+
+|         101 | 2021-02-21 19:17:53 |
++-------------+---------------------+
++-------------+---------------------+
+| @@server_id | NOW()               |
++-------------+---------------------+
+|         100 | 2021-02-21 19:17:54 |
++-------------+---------------------+
+```
 
+Leave this open in a separate window while you test failure in the next section.
+
+MySQL container uses readiness probe by running `mysql -h 127.0.0.1 -e 'SELECT 1'` on the server to make sure MySQL server is still active. Open a new terminal and simulate MySQL as being unresponsive.
+
+```sh
+kubectl -n mysql exec mysql-1 -c mysql -- mv /usr/bin/mysql /usr/bin/mysql.off
+```
+
+This command renames the `/usr/bin/mysql` command so that readiness probe can't find it. During the next health check, the pod should report one of its containers is not healthy.
+
+```sh
+kubectl -n mysql get pod mysql-1
+```
+
+Output:
+```
+NAME      READY     STATUS    RESTARTS   AGE
+mysql-1   1/2       Running   0          12m
+```
+
+Notice only one container is in a `READY` state. 
+
+**mysql-read** load balancer detects failures and takes action by not sending traffic to the failed container, `@@server_id 101`. You can check this by viewing the loop running in the separate window from previous section. The loop shows the following output.
+
+```
++-------------+---------------------+
+| @@server_id | NOW()               |
++-------------+---------------------+
+|         100 | 2020-01-25 17:32:19 |
++-------------+---------------------+
++-------------+---------------------+
+| @@server_id | NOW()               |
++-------------+---------------------+
+|         100 | 2020-01-25 17:32:20 |
++-------------+---------------------+
++-------------+---------------------+
+| @@server_id | NOW()               |
++-------------+---------------------+
+|         100 | 2020-01-25 17:32:21 |
++-------------+---------------------+
+```
+
+Notice it does not read `@@server_id 101`
+
+Fix the mysql server
+```sh
+kubectl -n mysql exec mysql-1 -c mysql -- mv /usr/bin/mysql.off /usr/bin/mysql
+```
+
+Check the status again to see that both containers are running and healthy
+
+```sh
+kubectl -n mysql get pod mysql-1
+```
+
+Output:
+```
+NAME      READY     STATUS    RESTARTS   AGE
+mysql-1   2/2       Running   0          5h
+```
+
+The loop in another terminal is now showing` @@server_id 101` is back and all servers are running. Press `Ctrl+C` to stop watching.
+
+To simulate a failed pod, delete mysql-1
+```sh
+kubectl -n mysql delete pod mysql-1
+```
+
+```
+pod "mysql-1" deleted
+```
+
+StatefulSet controller recognizes failed pod and creates a new one to maintain the number of replicas with the same name and link to the same `PersistentVolumeClaim`.
+
+```sh
+kubectl -n mysql get pod mysql-1 -w
+```
+
+Output
+```
+NAME      READY   STATUS        RESTARTS   AGE
+mysql-1   2/2     Terminating   0          15m
+mysql-1   0/2     Terminating   0          16m
+mysql-1   0/2     Terminating   0          16m
+mysql-1   0/2     Terminating   0          16m
+mysql-1   0/2     Pending       0          0s
+mysql-1   0/2     Pending       0          0s
+mysql-1   0/2     Init:0/2      0          0s
+mysql-1   0/2     Init:1/2      0          11s
+mysql-1   0/2     PodInitializing   0          12s
+mysql-1   1/2     Running           0          13s
+mysql-1   2/2     Running           0          18s
+```
+
+### Test Scaling 
+More followers can be added to the MySQL Cluster to increase read capacity. 
 ```sh
 kubectl -n mysql scale statefulset mysql --replicas=5
 ```
@@ -233,14 +387,133 @@ Watch the progress of ordered and graceful scaling.
 kubectl -n mysql rollout status statefulset mysql
 ```
 
-### Clean Up
+Output:
+```
+Waiting for 1 pods to be ready...
+partitioned roll out complete: 5 new pods have been updated...
+```
 
-To remove the resources we created in the cluster, you can delete the namespace:
+In another terminal watch the new pod come online
+```sh
+kubectl -n mysql get pods -l app=mysql --watch
+```
+
+To exit type `Ctrl+C`
+
+If you stopped the loop start it again. 
+```sh
+kubectl -n mysql run mysql-client-loop --image=mysql:5.7 -i -t --rm --restart=Never --\
+   bash -ic "while sleep 1; do mysql -h mysql-read -proot -e 'SELECT @@server_id,NOW()'; done"
+```
+
+You will now see 5 servers running. 
+
+Output:
+```
++-------------+---------------------+
+| @@server_id | NOW()               |
++-------------+---------------------+
+|         100 | 2020-01-25 02:32:43 |
++-------------+---------------------+
++-------------+---------------------+
+| @@server_id | NOW()               |
++-------------+---------------------+
+|         102 | 2020-01-25 02:32:44 |
++-------------+---------------------+
++-------------+---------------------+
+| @@server_id | NOW()               |
++-------------+---------------------+
+|         101 | 2020-01-25 02:32:45 |
++-------------+---------------------+
+```
+
+Verify if the newly deployed follower `mysql-4` has the same data set.
+```sh
+kubectl -n mysql run mysql-client --image=mysql:5.7 -i -t --rm --restart=Never --\
+ mysql -h mysql-4.mysql -proot -e "SELECT * FROM test.messages"
+```
+
+It will show the same data that the leader has.
+
+Output:
+```
++--------------------------+
+| message                  |
++--------------------------+
+| hello, from mysql-client |
++--------------------------+
+```
+
+Scale the replicas to 3
 
 ```sh
+kubectl -n mysql scale statefulset mysql --replicas=3
+```
+
+You can see that it removed the last added replicas. 
+```
+kubectl -n mysql get pods -l app=mysql
+```
+
+Output:
+```
+NAME      READY     STATUS    RESTARTS   AGE
+mysql-0   2/2       Running   0          1d
+mysql-1   2/2       Running   0          1d
+mysql-2   2/2       Running   0          1d
+```
+
+### Bonus: Change Reclaim Policy
+
+By default, deleting a PersistentVolumeClaim will delete its associated persistent volume. What if you wanted to keep the volume?
+
+1. Find the PersistentVolume attached to the PersistentVolumeClaim data-mysql-2:
+
+```sh
+export pv=$(kubectl -n mysql get pvc data-mysql-2 -o json | jq --raw-output '.spec.volumeName')
+echo data-mysql-2 PersistentVolume name: ${pv}
+```
+
+2. Update the ReclaimPolicy:
+
+```sh
+kubectl -n mysql patch pv ${pv} -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+```
+
+3. Verify the ReclaimPolicy was updated:
+
+```sh
+kubectl get persistentvolume
+```
+
+Now, if you delete the PersistentVolumeClaim data-mysql-2, you can still see the Azure Managed Disk in your Azure portal, with its state as "available".
+
+4. Change the reclaim policy back to "Delete" to avoid orphaned volumes:
+
+```sh
+kubectl patch pv ${pv} -p '{"spec":{"persistentVolumeReclaimPolicy":"Delete"}}'
+unset pv
+```
+
+5. Delete data-mysql-2:
+
+```sh
+kubectl -n mysql delete pvc data-mysql-2
+```
+
+Output:
+```
+persistentvolumeclaim "data-mysql-2" deleted
+
+## Cleanup
+```sh
+kubectl delete \
+  -f ${HOME}/environment/ebs_statefulset/mysql-statefulset.yaml \
+  -f ${HOME}/environment/ebs_statefulset/mysql-services.yaml \
+  -f ${HOME}/environment/ebs_statefulset/mysql-configmap.yaml \
+
+# Delete the mysql namespace 
 kubectl delete namespace mysql
 ```
 
-## Congratulations!
-
-You've successfully deployed and tested a StatefulSet in AKS!
+## Congrats!
