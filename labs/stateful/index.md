@@ -32,7 +32,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: mysql-config
-  namespace: mysql-1
+  namespace: mysql
   labels:
     app: mysql
 data:
@@ -66,7 +66,7 @@ cat << EoF > ${HOME}/environment/azure_statefulset/mysql-services.yaml
 apiVersion: v1
 kind: Service
 metadata:
-  namespace: mysql-1
+  namespace: mysql
   name: mysql
   labels:
     app: mysql
@@ -83,7 +83,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  namespace: mysql-1
+  namespace: mysql
   name: mysql-read
   labels:
     app: mysql
@@ -117,7 +117,7 @@ cat << 'EoF' > ${HOME}/environment/azure_statefulset/mysql-statefulset.yaml
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  namespace: mysql-1
+  namespace: mysql
   name: mysql
 spec:
   selector:
