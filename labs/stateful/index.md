@@ -37,13 +37,15 @@ metadata:
     app: mysql
 data:
   master.cnf: |
-    # Apply this config only on the leader.
     [mysqld]
-    log-bin
+    log-bin=mysql-bin
+    server-id=1
+    read_only=OFF
+    super_read_only=OFF
   slave.cnf: |
-    # Apply this config only on followers.
     [mysqld]
-    super-read-only
+    super-read-only=ON
+    server-id=2
 EoF
 ```
 
