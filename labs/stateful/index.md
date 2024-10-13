@@ -32,7 +32,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: mysql-config
-  namespace: mysql
+  namespace: mysql-1
   labels:
     app: mysql
 data:
@@ -66,7 +66,7 @@ cat << EoF > ${HOME}/environment/azure_statefulset/mysql-services.yaml
 apiVersion: v1
 kind: Service
 metadata:
-  namespace: mysql
+  namespace: mysql-1
   name: mysql
   labels:
     app: mysql
@@ -83,7 +83,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  namespace: mysql
+  namespace: mysql-1
   name: mysql-read
   labels:
     app: mysql
@@ -117,7 +117,7 @@ cat << 'EoF' > ${HOME}/environment/azure_statefulset/mysql-statefulset.yaml
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  namespace: mysql
+  namespace: mysql-1
   name: mysql
 spec:
   selector:
@@ -205,8 +205,10 @@ spec:
           timeoutSeconds: 5
         readinessProbe:
           exec:
-            # Check we can execute queries over TCP (skip-networking is off).
-            command: ["mysql", "-h", "127.0.0.1", "-e", "SELECT 1"]
+            command: 
+            - sh
+            - -c
+            - "[ ! -f /tmp/mysql-not-ready ] && mysql -h 127.0.0.1 -e 'SELECT 1'"
           initialDelaySeconds: 5
           periodSeconds: 2
           timeoutSeconds: 1
@@ -405,10 +407,10 @@ Leave this open in a separate window while you test failure in the next section.
 MySQL container uses readiness probe by running `mysql -h 127.0.0.1 -e 'SELECT 1'` on the server to make sure MySQL server is still active. Open a new terminal and simulate MySQL as being unresponsive.
 
 ```sh
-kubectl -n mysql exec mysql-1 -c mysql -- mv /usr/bin/mysql /usr/bin/mysql.off
+kubectl -n mysql exec mysql-1 -c mysql -- touch /tmp/mysql-not-ready
 ```
 
-This command renames the `/usr/bin/mysql` command so that readiness probe can't find it. During the next health check, the pod should report one of its containers is not healthy.
+This command creates a file `/tmp/mysql-not-ready` which will cause the readiness probe to fail. The readiness probe is configured to check for the absence of this file. During the next health check, the pod should report that its MySQL container is not ready.
 
 ```sh
 kubectl -n mysql get pod mysql-1
@@ -446,7 +448,7 @@ Notice it does not read `@@server_id 101`
 
 Fix the mysql server
 ```sh
-kubectl -n mysql exec mysql-1 -c mysql -- mv /usr/bin/mysql.off /usr/bin/mysql
+kubectl -n mysql exec mysql-1 -c mysql -- rm /tmp/mysql-not-ready
 ```
 
 Check the status again to see that both containers are running and healthy
@@ -602,7 +604,7 @@ kubectl -n mysql patch pv ${pv} -p '{"spec":{"persistentVolumeReclaimPolicy":"Re
 3. Verify the ReclaimPolicy was updated:
 
 ```sh
-kubectl get persistentvolume
+kubectl -n mysql get persistentvolume
 ```
 
 Now, if you delete the PersistentVolumeClaim data-mysql-2, you can still see the Azure Managed Disk in your Azure portal, with its state as "available".
@@ -610,7 +612,7 @@ Now, if you delete the PersistentVolumeClaim data-mysql-2, you can still see the
 4. Change the reclaim policy back to "Delete" to avoid orphaned volumes:
 
 ```sh
-kubectl patch pv ${pv} -p '{"spec":{"persistentVolumeReclaimPolicy":"Delete"}}'
+kubectl -n mysql patch pv ${pv} -p '{"spec":{"persistentVolumeReclaimPolicy":"Delete"}}'
 unset pv
 ```
 
@@ -627,9 +629,9 @@ persistentvolumeclaim "data-mysql-2" deleted
 ## Cleanup
 ```sh
 kubectl delete \
-  -f ${HOME}/environment/ebs_statefulset/mysql-statefulset.yaml \
-  -f ${HOME}/environment/ebs_statefulset/mysql-services.yaml \
-  -f ${HOME}/environment/ebs_statefulset/mysql-configmap.yaml \
+  -f ${HOME}/environment/azure_statefulset/mysql-statefulset.yaml \
+  -f ${HOME}/environment/azure_statefulset/mysql-services.yaml \
+  -f ${HOME}/environment/azure_statefulset/mysql-configmap.yaml \
 
 # Delete the mysql namespace 
 kubectl delete namespace mysql
